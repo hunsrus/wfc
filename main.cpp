@@ -3,6 +3,8 @@
 #include <iostream>
 #include <vector>
 
+static bool DRAW_ENTROPY = false;
+
 typedef struct{
     int x;
     int y;
@@ -28,6 +30,10 @@ typedef struct {
     Color color = BLACK;
     std::vector<Condition> possibleConditions;
 }Cell;
+
+float mapear(float x, float in_min, float in_max, float out_min, float out_max) {
+    return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
 
 void collapseCell(Cell **cell, Vector2i position, Vector2i size);
 
@@ -146,11 +152,13 @@ double getCellEntropy(Cell **cell, Vector2i position) {
 
 Vector2i minimalEntropyCoords(Cell **cell, Vector2i size) {
     Vector2i min = {0,0};
+    double minEntropy = 999;
     for(int j = 0; j < size.y; j++) {
         for(int i = 0; i < size.x; i++) {
-            if(cell[i][j].entropy < cell[min.x][min.y].entropy && !cell[i][j].collapsed) {
+            if(cell[i][j].entropy < minEntropy && !cell[i][j].collapsed) {
                 min.x = i;
                 min.y = j;
+                minEntropy = cell[min.x][min.y].entropy;
             }
         }
     }
@@ -194,7 +202,7 @@ void propagateStates(Cell **cell, Vector2i position, Vector2i size) {
                             for(std::vector<Condition>::iterator condition = auxPossibleConditions.begin(); condition <= auxPossibleConditions.end(); condition++) {
                                 if(condition->position == RIGHT && !compareColors(condition->color2, pixelColor)) {
                                     auxPossibleConditions.erase(condition);
-                                    // condition = auxPossibleConditions.begin();
+                                    condition = auxPossibleConditions.begin();
                                 }else {
                                     a += condition->occurences;
                                     b += condition->occurences*log(condition->occurences);
@@ -221,7 +229,7 @@ void propagateStates(Cell **cell, Vector2i position, Vector2i size) {
                             for(std::vector<Condition>::iterator condition = auxPossibleConditions.begin(); condition <= auxPossibleConditions.end(); condition++) {
                                 if(condition->position == LEFT && !compareColors(condition->color2, pixelColor)) {
                                     auxPossibleConditions.erase(condition);
-                                    // condition = auxPossibleConditions.begin();
+                                    condition = auxPossibleConditions.begin();
                                 }else {
                                     a += condition->occurences;
                                     b += condition->occurences*log(condition->occurences);
@@ -246,9 +254,9 @@ void propagateStates(Cell **cell, Vector2i position, Vector2i size) {
                         if(!auxPossibleConditions.empty()) {
                             double a = 0, b = 0;
                             for(std::vector<Condition>::iterator condition = auxPossibleConditions.begin(); condition <= auxPossibleConditions.end(); condition++) {
-                                if(condition->position == UP && !compareColors(condition->color2, pixelColor)) {
+                                if(condition->position == DOWN && !compareColors(condition->color2, pixelColor)) {
                                     auxPossibleConditions.erase(condition);
-                                    // condition = auxPossibleConditions.begin();
+                                    condition = auxPossibleConditions.begin();
                                 }else {
                                     a += condition->occurences;
                                     b += condition->occurences*log(condition->occurences);
@@ -273,9 +281,9 @@ void propagateStates(Cell **cell, Vector2i position, Vector2i size) {
                         if(!auxPossibleConditions.empty()) {
                             double a = 0, b = 0;
                             for(std::vector<Condition>::iterator condition = auxPossibleConditions.begin(); condition <= auxPossibleConditions.end(); condition++) {
-                                if(condition->position == DOWN && !compareColors(condition->color2, pixelColor)) {
+                                if(condition->position == UP && !compareColors(condition->color2, pixelColor)) {
                                     auxPossibleConditions.erase(condition);
-                                    // condition = auxPossibleConditions.begin();
+                                    condition = auxPossibleConditions.begin();
                                 }else {
                                     a += condition->occurences;
                                     b += condition->occurences*log(condition->occurences);
@@ -292,28 +300,31 @@ void propagateStates(Cell **cell, Vector2i position, Vector2i size) {
 }
 
 void collapseCell(Cell **cell, Vector2i position, Vector2i size) {
-
-    int conditionIndex = GetRandomValue(0,cell[position.x][position.y].possibleConditions.size()-1);
-    cell[position.x][position.y].color = cell[position.x][position.y].possibleConditions.at(conditionIndex).color1;
-    cell[position.x][position.y].collapsed = 1;
-    cell[position.x][position.y].entropy = 0;
-    cell[position.x][position.y].possibleConditions.clear();
-    
-    propagateStates(cell, position, size);
+    if(!cell[position.x][position.y].collapsed)
+    {
+        int conditionIndex = GetRandomValue(0,cell[position.x][position.y].possibleConditions.size()-1);
+        cell[position.x][position.y].color = cell[position.x][position.y].possibleConditions.at(conditionIndex).color1;
+        cell[position.x][position.y].collapsed = 1;
+        cell[position.x][position.y].entropy = 0;
+        cell[position.x][position.y].possibleConditions.clear();
+        
+        propagateStates(cell, position, size);
+    }
 }
 
 int main() {
     // Initialize the window
-    const int screenWidth = 480;
-    const int screenHeight = 480;
+    const int screenWidth = 128;
+    const int screenHeight = 128;
     InitWindow(screenWidth, screenHeight, "Raylib Example");
 
     // Set the target FPS
     SetTargetFPS(60);
 
-    std::vector<Condition> conditions = getConditionsFromImage("src/input3.png");
+    std::vector<Condition> conditions = getConditionsFromImage("src/input2.png");
     
-    Vector2i mapSize = {12, 12};
+    Vector2i mapSize = {24, 24};
+    int cellSize = 5;
 
     // random initial position
     Vector2i initialPosition = {GetRandomValue(0,mapSize.x-1), GetRandomValue(0,mapSize.y-1)};
@@ -336,7 +347,7 @@ int main() {
         for(int j = 0; j < mapSize.y; j++){
             map[i][j].collapsed = 0;
             map[i][j].color = BLACK;
-            map[i][j].entropy = 0;
+            map[i][j].entropy = 999;
             map[i][j].possibleConditions = conditions;
         }
 
@@ -344,9 +355,14 @@ int main() {
 
     // Main loop
     while (!WindowShouldClose()) {
-        // Update logic here
+        
+        if(IsKeyPressed(KEY_TAB)) {
+            DRAW_ENTROPY = !DRAW_ENTROPY;
+        }
+
         if(IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-            collapseCell(map, (Vector2i){GetMouseX()/10, GetMouseY()/10}, mapSize);
+            collapseCell(map, (Vector2i){GetMouseX()/cellSize, GetMouseY()/cellSize}, mapSize);
+            // collapseCell(map, (Vector2i){GetMouseX(), GetMouseY()}, mapSize);
         }
         // if(IsKeyDown(KEY_SPACE)) {
             // initialPosition = {GetRandomValue(0,mapSize.x-1), GetRandomValue(0,mapSize.y-1)};
@@ -360,9 +376,13 @@ int main() {
 
             for(int i = 0; i < mapSize.x; i++){
                 for(int j = 0; j < mapSize.y; j++){
-                    DrawRectangle(i*10-5,j*10-5,10,10,map[i][j].color);
-                    // DrawRectangle(i*10-5,j*10-5,10,10,(Color){map[i][j].entropy*128,0,0,255});
-                    // DrawPixel(i,j,map[i][j].color);
+                    if(DRAW_ENTROPY){
+                        DrawRectangle(i*cellSize-cellSize/2.0f,j*cellSize-cellSize/2.0f,cellSize,cellSize,(Color){mapear(map[i][j].entropy,0,1,0,255),0,0,255});
+                        // DrawPixel(i,j,(Color){mapear(map[i][j].entropy,0,1,0,255),0,0,255});
+                    }else{
+                        // DrawPixel(i,j,map[i][j].color);
+                        DrawRectangle(i*cellSize-cellSize/2.0f,j*cellSize-cellSize/2.0f,cellSize,cellSize,map[i][j].color);
+                    }
                 }
             }
 
@@ -370,14 +390,14 @@ int main() {
         // End drawing
         EndDrawing();
     }
-
+    
     // Close the window and clean up resources
     CloseWindow();
 
-    for(int i = 0; i < mapSize.x; i++) {
-        free(map[i]);
-    }
-    free(map);
+    // for(int i = 0; i < mapSize.x; i++) {
+    //     free(map[i]);
+    // }
+    // free(map);
 
     return 0;
 }
